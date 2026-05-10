@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pakar Pemilihan Laptop | Fuzzy Logic</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Include BoxIcons for beautiful icons -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Background decorative elements -->
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        
+        <header class="header">
+            <div class="logo">
+                <i class='bx bx-laptop'></i>
+                <h1>Sistem Pakar Laptop</h1>
+            </div>
+            <p>Temukan laptop terbaik untuk kebutuhan akademikmu menggunakan teknologi Fuzzy Logic.</p>
+        </header>
+
+        <main class="main-content">
+            <section class="filter-section">
+                <form id="recommendationForm" class="glass-panel">
+                    <h2>Kriteria Pencarian</h2>
+                    
+                    <div class="form-group">
+                        <label for="budget">Maksimal Budget (Rupiah)</label>
+                        <div class="input-wrapper">
+                            <i class='bx bx-money'></i>
+                            <input type="number" id="budget" name="budget" value="10000000" min="2000000" max="100000000" step="500000" required>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="budgetSlider" min="2000000" max="50000000" step="500000" value="10000000">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="profile">Profil Akademik</label>
+                        <div class="input-wrapper select-wrapper">
+                            <i class='bx bx-user-pin'></i>
+                            <select id="profile" name="profile" required>
+                                <option value="Pemrograman / Data Science">Pemrograman / Data Science</option>
+                                <option value="Desain Grafis / Multimedia">Desain Grafis / Multimedia</option>
+                                <option value="Administrasi / Tugas Umum" selected>Administrasi / Tugas Umum</option>
+                                <option value="Gaming">Gaming / Kinerja Tinggi</option>
+                            </select>
+                            <i class='bx bx-chevron-down arrow'></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="minDisplay">Preferensi Layar Minimal (Inci) - Opsional</label>
+                        <div class="input-wrapper select-wrapper">
+                            <i class='bx bx-desktop'></i>
+                            <select id="minDisplay" name="min_display">
+                                <option value="0">Tidak ada preferensi</option>
+                                <option value="13.0">13 Inci (Portabel)</option>
+                                <option value="14.0">14 Inci (Standar)</option>
+                                <option value="15.6">15.6 Inci (Layar Lebar)</option>
+                            </select>
+                            <i class='bx bx-chevron-down arrow'></i>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="btnSubmit">
+                        <span>Cari Rekomendasi</span>
+                        <i class='bx bx-search'></i>
+                    </button>
+                </form>
+            </section>
+
+            <section class="results-section">
+                <div class="results-header">
+                    <h2>Rekomendasi Terbaik</h2>
+                    <span id="resultCount" class="badge">0 Ditemukan</span>
+                </div>
+                
+                <div id="loading" class="loading-state hidden">
+                    <div class="spinner"></div>
+                    <p>Menganalisis dataset dengan algoritma Fuzzy Logic...</p>
+                </div>
+                
+                <div id="resultsContainer" class="results-grid">
+                    <!-- Cards will be injected here via JS -->
+                    <div class="empty-state">
+                        <i class='bx bx-slider-alt'></i>
+                        <p>Silakan sesuaikan filter dan klik tombol cari untuk melihat rekomendasi.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal for details -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content glass-panel">
+            <button class="close-btn" id="closeModal"><i class='bx bx-x'></i></button>
+            <div id="modalBody">
+                <!-- Content injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
