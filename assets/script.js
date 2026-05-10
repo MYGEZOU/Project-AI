@@ -13,6 +13,8 @@ const budgetSlider  = $('budgetSlider');
 const budgetDisplay = $('budgetDisplay');
 const profileSel    = $('profile');
 const displaySel    = $('minDisplay');
+const osSel         = $('osPref');
+const brandSel      = $('brandPref');
 const btnCari       = $('btnCari');
 
 const loadingState  = $('loadingState');
@@ -46,7 +48,7 @@ budgetSlider.addEventListener('input', (e) => {
 
 budgetInput.addEventListener('input', (e) => {
     const v = parseInt(e.target.value) || 10000000;
-    const clamped = Math.min(Math.max(v, 2000000), 50000000);
+    const clamped = Math.min(Math.max(v, 2000000), 40000000);
     budgetSlider.value = clamped;
     updateBudgetDisplay(e.target.value);
 });
@@ -220,6 +222,8 @@ form.addEventListener('submit', async (e) => {
     const budget     = parseInt(budgetInput.value) || 10000000;
     const profile    = profileSel.value;
     const minDisplay = parseFloat(displaySel.value) || 0;
+    const os         = osSel.value;
+    const brand      = brandSel.value;
 
     // UI: Loading
     showState(loadingState);
@@ -231,7 +235,7 @@ form.addEventListener('submit', async (e) => {
         const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ budget, profile, min_display: minDisplay })
+            body: JSON.stringify({ budget, profile, min_display: minDisplay, os, brand })
         });
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

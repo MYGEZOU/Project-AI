@@ -47,8 +47,8 @@
                             <input type="number" id="budget" value="10000000" min="2000000" max="100000000" step="500000">
                         </div>
                         <span class="budget-display" id="budgetDisplay">Rp 10.000.000</span>
-                        <input type="range" class="slider" id="budgetSlider" min="2000000" max="50000000" step="500000" value="10000000">
-                        <div class="slider-labels"><span>Rp 2jt</span><span>Rp 50jt</span></div>
+                        <input type="range" class="slider" id="budgetSlider" min="2000000" max="40000000" step="500000" value="10000000">
+                        <div class="slider-labels"><span>Rp 2jt</span><span>Rp 40jt</span></div>
                     </div>
 
                     <!-- Profil Akademik -->
@@ -61,6 +61,50 @@
                                 <option value="Desain Grafis / Multimedia">🎨 Desain Grafis / Multimedia</option>
                                 <option value="Administrasi / Tugas Umum" selected>📝 Administrasi / Tugas Umum</option>
                                 <option value="Gaming">🎮 Gaming / Kinerja Tinggi</option>
+                            </select>
+                            <i class='bx bx-chevron-down select-arrow'></i>
+                        </div>
+                    </div>
+
+                    <!-- Operating System -->
+                    <div class="field-group">
+                        <label for="osPref">Sistem Operasi (Opsional)</label>
+                        <div class="select-wrap">
+                            <i class='bx bx-cog'></i>
+                            <select id="osPref">
+                                <option value="">Semua OS (Tidak ada preferensi)</option>
+                                <option value="Windows 11">Windows 11</option>
+                                <option value="Windows 10">Windows 10</option>
+                                <option value="Mac">Mac OS</option>
+                                <option value="Chrome">Chrome OS</option>
+                                <option value="Ubuntu">Linux/Ubuntu</option>
+                                <option value="Android">Android OS</option>
+                                <option value="DOS">DOS / No OS</option>
+                            </select>
+                            <i class='bx bx-chevron-down select-arrow'></i>
+                        </div>
+                    </div>
+
+                    <!-- Brand Preference -->
+                    <div class="field-group">
+                        <label for="brandPref">Preferensi Brand (Opsional)</label>
+                        <div class="select-wrap">
+                            <i class='bx bxl-apple'></i>
+                            <select id="brandPref">
+                                <option value="">Semua Brand</option>
+                                <option value="HP">HP</option>
+                                <option value="Acer">Acer</option>
+                                <option value="Lenovo">Lenovo</option>
+                                <option value="Apple">Apple</option>
+                                <option value="Dell">Dell</option>
+                                <option value="Asus">Asus</option>
+                                <option value="Samsung">Samsung</option>
+                                <option value="MSI">MSI</option>
+                                <option value="Xiaomi">Xiaomi</option>
+                                <option value="Infinix">Infinix</option>
+                                <option value="Microsoft">Microsoft</option>
+                                <option value="Razer">Razer</option>
+                                <option value="Gigabyte">Gigabyte</option>
                             </select>
                             <i class='bx bx-chevron-down select-arrow'></i>
                         </div>

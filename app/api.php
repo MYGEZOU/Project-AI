@@ -60,11 +60,7 @@ function loadDataset($filepath) {
     // Normalisasi nama header: hapus BOM, trim whitespace
     $header = array_map(fn($h) => trim(str_replace("\xEF\xBB\xBF", '', $h)), $header);
 
-    // Ganti nama kolom "Unnamed: 0.1" atau "Unnamed: 0" menjadi "nomor"
-    $header = array_map(function($h) {
-        if (str_contains($h, 'Unnamed')) return 'nomor';
-        return $h;
-    }, $header);
+    // Header sudah dibersihkan secara fisik ke 'nomor'
 
     while (($row = fgetcsv($handle)) !== false) {
         if (count($row) === count($header)) {
@@ -104,9 +100,9 @@ function fuzzyInference($laptop, $budget, $profile) {
     // -- Himpunan Keanggotaan Input --
     $m = [
         'price' => [
-            'Rendah' => trapz($p, 0, 0, 6000000, 10000000),
-            'Sedang' => trimf($p, 6000000, 10000000, 15000000),
-            'Tinggi' => trapz($p, 10000000, 15000000, 1e9, 1e9),
+            'Rendah' => trapz($p, 0, 0, 7000000, 12000000),
+            'Sedang' => trimf($p, 7000000, 15000000, 25000000),
+            'Tinggi' => trapz($p, 15000000, 25000000, 1e9, 1e9),
         ],
         'cpu' => [
             'Rendah' => trapz($c, 0, 0, 40, 62),
@@ -208,8 +204,27 @@ function fuzzyInference($laptop, $budget, $profile) {
 
     $suitability = $denominator > 0 ? ($numerator / $denominator) : 0;
 
-    // Penalti budget (mengalikan dengan derajat kecocokan harga)
-    $finalScore = $suitability * $within_budget;
+    // -- Tambahan: Preferensi Brand & OS (Kriteria Tambahan) --
+    $bonus = 1.0;
+    
+    // Brand Match
+    if (!empty($laptop['brand_pref']) && strcasecmp($laptop['brand'], $laptop['brand_pref']) === 0) {
+        $bonus += 0.15; // Bonus 15% jika brand cocok
+    }
+
+    // OS Match
+    if (!empty($laptop['os_pref'])) {
+        $actualOS = strtolower($laptop['OS'] ?? '');
+        $prefOS = strtolower($laptop['os_pref']);
+        
+        // Pengecekan substring sederhana untuk OS
+        if (str_contains($actualOS, $prefOS)) {
+            $bonus += 0.10; // Bonus 10% jika OS cocok
+        }
+    }
+
+    $finalScore = ($suitability * $within_budget) * $bonus;
+    $finalScore = min(max($finalScore, 0), 100);
 
     if ($finalScore < 15 && $within_budget < 0.5) {
         $bestReason = 'Harga laptop melebihi toleransi budget yang ditentukan.';
@@ -231,6 +246,8 @@ if (!$input) {
 $budget     = (float) ($input['budget']     ?? 10000000);
 $profile    = (string)($input['profile']    ?? 'Administrasi / Tugas Umum');
 $minDisplay = (float) ($input['min_display'] ?? 0);
+$brandPref  = (string)($input['brand']       ?? '');
+$osPref     = (string)($input['os']          ?? '');
 
 // Path ke CSV (dua level di atas folder app/)
 $csvPath = __DIR__ . '/../laptop_data_cleaned (2).csv';
@@ -244,16 +261,57 @@ if (empty($laptops)) {
 $results = [];
 
 foreach ($laptops as $laptop) {
-    // Filter layar (crisp)
+    // === HARD FILTER: Layar Minimal ===
     if ($minDisplay > 0 && $laptop['display_size'] < $minDisplay) continue;
 
-    // Pra-filter harga (skip laptop sangat mahal untuk optimasi)
+    // === HARD FILTER: Pra-filter harga ===
     if ($laptop['price'] > $budget * 1.2) continue;
+
+    // === HARD FILTER: Brand (jika dipilih) ===
+    if (!empty($brandPref)) {
+        $laptopBrand = strtolower(trim($laptop['brand'] ?? ''));
+        $prefBrand   = strtolower(trim($brandPref));
+        if ($laptopBrand !== $prefBrand) continue;
+    }
+
+    // === HARD FILTER: OS (jika dipilih) ===
+    // Normalisasi: petakan value pilihan user ke kata kunci yang ada di kolom OS dataset
+    if (!empty($osPref)) {
+        $osRaw = strtolower(trim($laptop['OS'] ?? ''));
+
+        // Peta normalisasi: value form → keyword yang dicari di kolom OS dataset
+        $osKeywordMap = [
+            'windows 11' => ['windows 11'],
+            'windows 10' => ['windows 10'],
+            'mac'        => ['mac os', 'mac catalina', 'mac high sierra', 'mac 10.', 'macos'],
+            'chrome'     => ['chrome os'],
+            'ubuntu'     => ['ubuntu'],
+            'android'    => ['android'],
+            'dos'        => ['dos'],
+        ];
+
+        $prefKey     = strtolower(trim($osPref));
+        $keywords    = $osKeywordMap[$prefKey] ?? [strtolower($osPref)];
+
+        $matched = false;
+        foreach ($keywords as $kw) {
+            if (str_contains($osRaw, $kw)) {
+                $matched = true;
+                break;
+            }
+        }
+        if (!$matched) continue;
+    }
+
+    // Masukkan pref ke data laptop untuk bonus skor (opsional, sudah ditangani oleh hard filter)
+    $laptop['brand_pref'] = $brandPref;
+    $laptop['os_pref']    = $osPref;
 
     $res = fuzzyInference($laptop, $budget, $profile);
 
     if ($res['score'] > 15) {
         $results[] = [
+            'nomor'   => $laptop['nomor']     ?? '0',
             'name'    => $laptop['name']      ?? 'N/A',
             'brand'   => $laptop['brand']     ?? 'N/A',
             'price'   => $laptop['price'],
