@@ -1,6 +1,6 @@
 <?php
 /**
- * Sistem Pakar Pemilihan Laptop - Fuzzy Logic
+ * Sistem Pakar Pemilihan Laptop - Fuzzy Logic (Sugeno/Tsukamoto Hybrid)
  * Backend API: Membaca CSV dan menjalankan inferensi fuzzy
  */
 
@@ -11,9 +11,6 @@ header('Access-Control-Allow-Origin: *');
 // FUNGSI MEMBERSHIP (KEANGGOTAAN FUZZY)
 // =============================================
 
-/**
- * Fungsi Trapesium: nilai max di antara b dan c
- */
 function trapz($x, $a, $b, $c, $d) {
     if ($x <= $a || $x >= $d) return 0.0;
     if ($x >= $b && $x <= $c)  return 1.0;
@@ -22,25 +19,12 @@ function trapz($x, $a, $b, $c, $d) {
     return 0.0;
 }
 
-/**
- * Fungsi Segitiga (Triangular)
- */
 function trimf($x, $a, $b, $c) {
     return trapz($x, $a, $b, $b, $c);
 }
 
-/**
- * Fungsi min (AND operator)
- */
 function fand(...$vals) {
     return min($vals);
-}
-
-/**
- * Fungsi max (OR operator)
- */
-function f_or(...$vals) {
-    return max($vals);
 }
 
 // =============================================
@@ -49,24 +33,21 @@ function f_or(...$vals) {
 
 function loadDataset($filepath) {
     $data = [];
-    if (!file_exists($filepath)) {
-        return $data;
-    }
+    if (!file_exists($filepath)) return $data;
 
     $handle = fopen($filepath, 'r');
     if (!$handle) return $data;
 
-    $header = fgetcsv($handle); // Baca baris header
-    // Normalisasi nama header: hapus BOM, trim whitespace
+    $header = fgetcsv($handle);
+    if (!$header) return $data;
+    
     $header = array_map(fn($h) => trim(str_replace("\xEF\xBB\xBF", '', $h)), $header);
-
-    // Header sudah dibersihkan secara fisik ke 'nomor'
 
     while (($row = fgetcsv($handle)) !== false) {
         if (count($row) === count($header)) {
             $laptop = array_combine($header, $row);
-
-            // Konversi tipe data numerik
+            
+            // Konversi numerik
             $laptop['price']        = (float) ($laptop['price'] ?? 0);
             $laptop['cpu_score']    = (float) ($laptop['cpu_score'] ?? 50);
             $laptop['gpu_class']    = (float) ($laptop['gpu_class'] ?? 1);
@@ -74,9 +55,8 @@ function loadDataset($filepath) {
             $laptop['storage_gb']   = (float) ($laptop['storage_gb'] ?? 256);
             $laptop['display_size'] = (float) ($laptop['display_size'] ?? 14.0);
 
-            // Konversi penyimpanan: jika nilai <= 4, asumsi dalam TB -> GB
             if ($laptop['storage_gb'] <= 4 && $laptop['storage_gb'] > 0) {
-                $laptop['storage_gb'] = $laptop['storage_gb'] * 1024;
+                $laptop['storage_gb'] *= 1024;
             }
 
             $data[] = $laptop;
@@ -87,251 +67,209 @@ function loadDataset($filepath) {
 }
 
 // =============================================
-// MESIN INFERENSI FUZZY
+// MESIN INFERENSI FUZZY (SUGENO & TSUKAMOTO)
 // =============================================
 
-function fuzzyInference($laptop, $budget, $profile) {
+/**
+ * METODE SUGENO
+ * Output berupa nilai konstanta (z)
+ */
+function fuzzyInferenceSugeno($laptop, $budget, $profile) {
     $p = $laptop['price'];
     $c = $laptop['cpu_score'];
     $g = $laptop['gpu_class'];
     $r = $laptop['ram_gb'];
-    $s = $laptop['storage_gb'];
 
-    // -- Himpunan Keanggotaan Input --
+    // Fuzzifikasi
     $m = [
         'price' => [
-            'Rendah' => trapz($p, 0, 0, 7000000, 12000000),
+            'Murah'  => trapz($p, 0, 0, 6000000, 10000000),
             'Sedang' => trimf($p, 7000000, 15000000, 25000000),
-            'Tinggi' => trapz($p, 15000000, 25000000, 1e9, 1e9),
+            'Mahal'  => trapz($p, 18000000, 28000000, 1e12, 1e12),
         ],
         'cpu' => [
-            'Rendah' => trapz($c, 0, 0, 40, 62),
-            'Sedang' => trimf($c, 40, 65, 82),
-            'Tinggi' => trapz($c, 65, 80, 100, 100),
+            'Rendah' => trapz($c, 0, 0, 35, 55),
+            'Sedang' => trimf($c, 40, 65, 85),
+            'Tinggi' => trapz($c, 70, 85, 100, 100),
         ],
         'gpu' => [
-            'Rendah' => trapz($g, 0, 1, 1, 2.5),
-            'Sedang' => trapz($g, 1.5, 2, 3, 3.5),
-            'Tinggi' => trapz($g, 2.5, 3.5, 5, 5),
+            'Basic'  => trapz($g, 0, 1, 1, 2.2),
+            'Mid'    => trimf($g, 1.8, 3, 4),
+            'High'   => trapz($g, 3.5, 4.5, 5.5, 5.5),
         ],
         'ram' => [
-            'Rendah' => trapz($r, 0, 0, 4, 8),
-            'Sedang' => trimf($r, 4, 8, 16),
-            'Tinggi' => trapz($r, 8, 16, 128, 128),
-        ],
-        'storage' => [
-            'Rendah' => trapz($s, 0, 0, 256, 512),
-            'Sedang' => trimf($s, 256, 512, 1024),
-            'Tinggi' => trapz($s, 512, 1024, 4096, 4096),
+            'Kecil'  => trapz($r, 0, 0, 4, 8),
+            'Cukup'  => trimf($r, 4, 8, 16),
+            'Besar'  => trapz($r, 8, 16, 128, 128),
         ],
     ];
 
-    // -- Toleransi Budget (Fuzzy) --
-    // Tepat di bawah budget = kecocokan penuh; 15% di atas budget = kecocokan 0
-    $within_budget = trapz($p, 0, 0, $budget, $budget * 1.15);
-
-    // -- Basis Aturan Fuzzy berdasarkan Profil --
+    // Budget Match: laptop yang harganya mendekati budget mendapat nilai lebih tinggi
+    // Sweet spot: 65%-100% dari budget (nilai penuh), di luar range ini nilainya berkurang
+    $budget_match = trapz($p, 0, $budget * 0.65, $budget, $budget * 1.15);
     $rules = [];
-
-    if ($profile === 'Pemrograman / Data Science') {
-        // IF cpu TINGGI AND ram TINGGI THEN suitability TINGGI
-        $rules[] = ['w' => fand($m['cpu']['Tinggi'], $m['ram']['Tinggi']), 'output' => 95, 'reason' => 'CPU & RAM sangat mumpuni untuk coding dan data science.'];
-        // IF cpu SEDANG AND ram TINGGI THEN suitability SEDANG
-        $rules[] = ['w' => fand($m['cpu']['Sedang'], $m['ram']['Tinggi']), 'output' => 65, 'reason' => 'RAM besar mendukung multitasking, CPU cukup untuk pemrograman.'];
-        // IF cpu TINGGI AND ram SEDANG THEN suitability SEDANG
-        $rules[] = ['w' => fand($m['cpu']['Tinggi'], $m['ram']['Sedang']), 'output' => 60, 'reason' => 'CPU cepat memperlancar kompilasi kode, RAM cukup untuk kebutuhan dasar.'];
-        // IF cpu SEDANG AND ram SEDANG THEN suitability SEDANG-RENDAH
-        $rules[] = ['w' => fand($m['cpu']['Sedang'], $m['ram']['Sedang']), 'output' => 50, 'reason' => 'Spesifikasi cukup untuk pemrograman ringan dan perkuliahan.'];
-        // IF storage TINGGI THEN bonus
-        $rules[] = ['w' => fand($m['cpu']['Tinggi'], $m['storage']['Tinggi']), 'output' => 70, 'reason' => 'Storage besar cocok untuk menyimpan dataset dan project besar.'];
-        // IF cpu RENDAH OR ram RENDAH THEN suitability RENDAH
-        $rules[] = ['w' => f_or($m['cpu']['Rendah'], $m['ram']['Rendah']), 'output' => 20, 'reason' => 'Spesifikasi tidak memadai untuk tugas pemrograman berat.'];
-
-    } elseif ($profile === 'Desain Grafis / Multimedia') {
-        // IF gpu TINGGI AND cpu TINGGI AND ram TINGGI THEN TINGGI
-        $rules[] = ['w' => fand($m['gpu']['Tinggi'], $m['cpu']['Tinggi'], $m['ram']['Tinggi']), 'output' => 95, 'reason' => 'Performa grafis & prosesor maksimal, ideal untuk rendering 3D dan video editing berat.'];
-        // IF gpu TINGGI AND cpu SEDANG THEN SEDANG-TINGGI
-        $rules[] = ['w' => fand($m['gpu']['Tinggi'], $m['cpu']['Sedang']), 'output' => 75, 'reason' => 'GPU dedicated powerful sangat menunjang desain UI/UX dan editing foto/video.'];
-        // IF gpu SEDANG AND cpu TINGGI THEN SEDANG
-        $rules[] = ['w' => fand($m['gpu']['Sedang'], $m['cpu']['Tinggi']), 'output' => 60, 'reason' => 'CPU kencang dengan GPU mid-range, cocok untuk desain 2D dan editing ringan.'];
-        // IF gpu SEDANG AND cpu SEDANG THEN SEDANG-RENDAH
-        $rules[] = ['w' => fand($m['gpu']['Sedang'], $m['cpu']['Sedang']), 'output' => 45, 'reason' => 'Cukup untuk desain grafis dan ilustrasi 2D standar.'];
-        // IF gpu RENDAH THEN RENDAH
-        $rules[] = ['w' => $m['gpu']['Rendah'], 'output' => 15, 'reason' => 'GPU integrated tidak direkomendasikan untuk desain grafis dan rendering 3D.'];
-
-    } elseif ($profile === 'Administrasi / Tugas Umum') {
-        // IF price RENDAH AND cpu SEDANG AND ram SEDANG THEN TINGGI
-        $rules[] = ['w' => fand($m['price']['Rendah'], $m['cpu']['Sedang'], $m['ram']['Sedang']), 'output' => 95, 'reason' => 'Ideal untuk tugas kuliah: harga hemat, performa lebih dari cukup untuk Office & browsing.'];
-        // IF price RENDAH AND cpu RENDAH AND ram SEDANG THEN TINGGI
-        $rules[] = ['w' => fand($m['price']['Rendah'], $m['ram']['Sedang']), 'output' => 80, 'reason' => 'Sangat hemat, RAM cukup untuk multitasking dan pengetikan dokumen.'];
-        // IF cpu SEDANG AND ram SEDANG THEN SEDANG
-        $rules[] = ['w' => fand($m['cpu']['Sedang'], $m['ram']['Sedang']), 'output' => 65, 'reason' => 'Performa stabil dan andal untuk tugas akademik sehari-hari.'];
-        // IF cpu RENDAH AND ram SEDANG THEN SEDANG
-        $rules[] = ['w' => fand($m['cpu']['Rendah'], $m['ram']['Sedang']), 'output' => 55, 'reason' => 'Cocok untuk kebutuhan ringan: browsing, dokumen, dan presentasi.'];
-        // IF ram RENDAH THEN RENDAH
-        $rules[] = ['w' => $m['ram']['Rendah'], 'output' => 20, 'reason' => 'RAM terlalu kecil, berisiko lag saat membuka banyak tab browser atau dokumen.'];
-
-    } elseif ($profile === 'Gaming') {
-        // IF gpu TINGGI AND cpu TINGGI THEN TINGGI
-        $rules[] = ['w' => fand($m['gpu']['Tinggi'], $m['cpu']['Tinggi']), 'output' => 97, 'reason' => 'Kombinasi GPU & CPU gaming-grade, mampu menjalankan game AAA di setting tinggi.'];
-        // IF gpu TINGGI AND cpu SEDANG THEN SEDANG-TINGGI
-        $rules[] = ['w' => fand($m['gpu']['Tinggi'], $m['cpu']['Sedang']), 'output' => 75, 'reason' => 'GPU kelas atas, ideal untuk gaming kompetitif dan esports.'];
-        // IF gpu SEDANG AND cpu TINGGI THEN SEDANG
-        $rules[] = ['w' => fand($m['gpu']['Sedang'], $m['cpu']['Tinggi']), 'output' => 60, 'reason' => 'CPU bertenaga dengan GPU menengah, cocok untuk game indie dan setting medium.'];
-        // IF gpu SEDANG AND cpu SEDANG AND ram TINGGI THEN SEDANG
-        $rules[] = ['w' => fand($m['gpu']['Sedang'], $m['cpu']['Sedang'], $m['ram']['Tinggi']), 'output' => 55, 'reason' => 'RAM besar membantu performa, cocok untuk game ringan dan multitasking.'];
-        // IF gpu RENDAH THEN RENDAH
-        $rules[] = ['w' => $m['gpu']['Rendah'], 'output' => 10, 'reason' => 'GPU integrated tidak direkomendasikan untuk gaming modern.'];
-    }
-
-    // Aturan umum terakhir (fallback)
-    $rules[] = ['w' => 0.05, 'output' => 30, 'reason' => 'Spesifikasi laptop sesuai dengan kebutuhan dasar pengguna.'];
-
-    // -- Defuzzifikasi: Sugeno Weighted Average --
-    $numerator   = 0;
-    $denominator = 0;
-    $bestReason  = 'Laptop ini memenuhi kriteria minimum pencarian.';
-    $maxWeight   = -1;
-
-    foreach ($rules as $rule) {
-        $numerator   += $rule['w'] * $rule['output'];
-        $denominator += $rule['w'];
-        if ($rule['w'] > $maxWeight && $rule['w'] > 0.08) {
-            $maxWeight  = $rule['w'];
-            $bestReason = $rule['reason'];
-        }
-    }
-
-    $suitability = $denominator > 0 ? ($numerator / $denominator) : 0;
-
-    // -- Tambahan: Preferensi Brand & OS (Kriteria Tambahan) --
-    $bonus = 1.0;
     
-    // Brand Match
-    if (!empty($laptop['brand_pref']) && strcasecmp($laptop['brand'], $laptop['brand_pref']) === 0) {
-        $bonus += 0.15; // Bonus 15% jika brand cocok
+    if ($profile === 'Pemrograman / Data Science') {
+        $rules[] = ['w' => fand($m['cpu']['Tinggi'], $m['ram']['Besar']), 'z' => 100, 'msg' => 'Spek Monster: CPU & RAM terbaik untuk kompilasi.'];
+        $rules[] = ['w' => fand($m['cpu']['Sedang'], $m['ram']['Besar']), 'z' => 85,  'msg' => 'Sangat Oke: RAM besar mendukung multitasking IDE.'];
+        $rules[] = ['w' => $m['cpu']['Rendah'], 'z' => 20, 'msg' => 'Prosesor kurang bertenaga untuk pengembangan software.'];
+    } elseif ($profile === 'Desain Grafis / Multimedia') {
+        $rules[] = ['w' => fand($m['gpu']['High'], $m['cpu']['Tinggi']), 'z' => 100, 'msg' => 'Sempurna: Kombinasi GPU & CPU terbaik untuk rendering.'];
+        $rules[] = ['w' => $m['gpu']['Basic'], 'z' => 15, 'msg' => 'GPU Integrated kurang disarankan untuk desain profesional.'];
+    } elseif ($profile === 'Gaming') {
+        $rules[] = ['w' => fand($m['gpu']['High'], $m['cpu']['Tinggi']), 'z' => 100, 'msg' => 'Gaming Beast: Siap libas game AAA rata kanan.'];
+        $rules[] = ['w' => $m['gpu']['Basic'], 'z' => 10, 'msg' => 'Bukan laptop gaming: Performa grafis terbatas.'];
+    } else {
+        $rules[] = ['w' => fand($m['price']['Murah'], $m['ram']['Cukup']), 'z' => 100, 'msg' => 'Pilihan Cerdas: Harga terjangkau dengan RAM cukup.'];
+        $rules[] = ['w' => $m['ram']['Kecil'], 'z' => 30, 'msg' => 'RAM 4GB mungkin terasa lambat saat ini.'];
     }
 
-    // OS Match
-    if (!empty($laptop['os_pref'])) {
-        $actualOS = strtolower($laptop['OS'] ?? '');
-        $prefOS = strtolower($laptop['os_pref']);
-        
-        // Pengecekan substring sederhana untuk OS
-        if (str_contains($actualOS, $prefOS)) {
-            $bonus += 0.10; // Bonus 10% jika OS cocok
+    $num = 0; $den = 0;
+    $best_msg = "Sesuai kriteria.";
+    $max_w = -1;
+
+    foreach ($rules as $r) {
+        $num += $r['w'] * $r['z'];
+        $den += $r['w'];
+        if ($r['w'] > $max_w && $r['w'] > 0) {
+            $max_w = $r['w'];
+            $best_msg = $r['msg'];
         }
     }
 
-    $finalScore = ($suitability * $within_budget) * $bonus;
-    $finalScore = min(max($finalScore, 0), 100);
+    $score = ($den > 0) ? ($num / $den) : 40;
+    return ['score' => round($score * $budget_match, 2), 'reason' => $best_msg];
+}
 
-    if ($finalScore < 15 && $within_budget < 0.5) {
-        $bestReason = 'Harga laptop melebihi toleransi budget yang ditentukan.';
+/**
+ * METODE TSUKAMOTO
+ * Output dihitung menggunakan fungsi keanggotaan monoton (z = f(alpha))
+ */
+function fuzzyInferenceTsukamoto($laptop, $budget, $profile) {
+    $p = $laptop['price'];
+    $c = $laptop['cpu_score'];
+    $g = $laptop['gpu_class'];
+    $r = $laptop['ram_gb'];
+
+    // Fuzzifikasi (Input sama dengan Sugeno)
+    $m = [
+        'cpu' => [
+            'Rendah' => trapz($c, 0, 0, 35, 55),
+            'Sedang' => trimf($c, 40, 65, 85),
+            'Tinggi' => trapz($c, 70, 85, 100, 100),
+        ],
+        'gpu' => [
+            'Basic'  => trapz($g, 0, 1, 1, 2.2),
+            'High'   => trapz($g, 3.5, 4.5, 5.5, 5.5),
+        ],
+        'ram' => [
+            'Kecil'  => trapz($r, 0, 0, 4, 8),
+            'Besar'  => trapz($r, 8, 16, 128, 128),
+        ],
+    ];
+
+    // Budget Match: sweet spot 65%-100% dari budget
+    $budget_match = trapz($p, 0, $budget * 0.65, $budget, $budget * 1.15);
+    
+    /**
+     * Definisi Output Monoton (Suitability 0-100)
+     * Tinggi: z = 0 + (alpha * 100) -> Makin besar alpha, makin tinggi z
+     * Rendah: z = 100 - (alpha * 100) -> Makin besar alpha, makin rendah z
+     */
+    $rules = [];
+    
+    if ($profile === 'Pemrograman / Data Science') {
+        $a1 = fand($m['cpu']['Tinggi'], $m['ram']['Besar']);
+        $rules[] = ['w' => $a1, 'z' => (0 + ($a1 * 100)), 'msg' => '[Tsukamoto] Spek sangat direkomendasikan.'];
+        
+        $a2 = $m['cpu']['Rendah'];
+        $rules[] = ['w' => $a2, 'z' => (100 - ($a2 * 100)), 'msg' => '[Tsukamoto] Performa CPU terlalu rendah.'];
+    } elseif ($profile === 'Desain Grafis / Multimedia' || $profile === 'Gaming') {
+        $a1 = fand($m['gpu']['High'], $m['cpu']['Tinggi']);
+        $rules[] = ['w' => $a1, 'z' => (0 + ($a1 * 100)), 'msg' => '[Tsukamoto] Grafis & CPU sangat kuat.'];
+        
+        $a2 = $m['gpu']['Basic'];
+        $rules[] = ['w' => $a2, 'z' => (100 - ($a2 * 100)), 'msg' => '[Tsukamoto] Performa grafis kurang.'];
+    } else {
+        $a1 = $m['ram']['Besar'];
+        $rules[] = ['w' => $a1, 'z' => (0 + ($a1 * 100)), 'msg' => '[Tsukamoto] Sangat nyaman untuk multitasking.'];
+        
+        $a2 = $m['ram']['Kecil'];
+        $rules[] = ['w' => $a2, 'z' => (100 - ($a2 * 100)), 'msg' => '[Tsukamoto] RAM terlalu terbatas.'];
     }
 
-    return ['score' => round($finalScore, 2), 'reason' => $bestReason];
+    $num = 0; $den = 0;
+    $max_w = -1; $best_msg = "Sesuai.";
+    
+    foreach ($rules as $r) {
+        if ($r['w'] > 0) {
+            $num += $r['w'] * $r['z'];
+            $den += $r['w'];
+            if ($r['w'] > $max_w) {
+                $max_w = $r['w'];
+                $best_msg = $r['msg'];
+            }
+        }
+    }
+
+    $score = ($den > 0) ? ($num / $den) : 50;
+    return ['score' => round($score * $budget_match, 2), 'reason' => $best_msg];
 }
 
 // =============================================
-// HANDLER REQUEST API
+// MAIN HANDLER
 // =============================================
 
-$input  = json_decode(file_get_contents('php://input'), true);
+$input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {
-    echo json_encode(['error' => 'Request tidak valid. Gunakan POST JSON.']);
+    echo json_encode(['error' => 'Invalid Request']);
     exit;
 }
 
-$budget     = (float) ($input['budget']     ?? 10000000);
-$profile    = (string)($input['profile']    ?? 'Administrasi / Tugas Umum');
-$minDisplay = (float) ($input['min_display'] ?? 0);
-$brandPref  = (string)($input['brand']       ?? '');
-$osPref     = (string)($input['os']          ?? '');
+$budget  = (float)($input['budget'] ?? 10000000);
+$profile = $input['profile'] ?? 'Administrasi / Tugas Umum';
+$method  = strtolower($input['method'] ?? 'sugeno'); // 'sugeno' atau 'tsukamoto'
+$brandPref = $input['brand'] ?? '';
 
-// Path ke CSV (dua level di atas folder app/)
 $csvPath = __DIR__ . '/../laptop_data_cleaned (2).csv';
 $laptops = loadDataset($csvPath);
 
 if (empty($laptops)) {
-    echo json_encode(['error' => "Dataset tidak ditemukan atau kosong di path: $csvPath"]);
+    echo json_encode(['error' => 'Dataset tidak ditemukan atau kosong. Path: ' . $csvPath]);
     exit;
 }
 
 $results = [];
-
 foreach ($laptops as $laptop) {
-    // === HARD FILTER: Layar Minimal ===
-    if ($minDisplay > 0 && $laptop['display_size'] < $minDisplay) continue;
+    if (!empty($brandPref) && strcasecmp($laptop['brand'], $brandPref) !== 0) continue;
+    // Hard filter: hanya laptop dalam 115% dari budget yang diproses
+    if ($laptop['price'] > $budget * 1.15) continue;
 
-    // === HARD FILTER: Pra-filter harga ===
-    if ($laptop['price'] > $budget * 1.2) continue;
-
-    // === HARD FILTER: Brand (jika dipilih) ===
-    if (!empty($brandPref)) {
-        $laptopBrand = strtolower(trim($laptop['brand'] ?? ''));
-        $prefBrand   = strtolower(trim($brandPref));
-        if ($laptopBrand !== $prefBrand) continue;
+    // Pilih Metode
+    if ($method === 'tsukamoto') {
+        $res = fuzzyInferenceTsukamoto($laptop, $budget, $profile);
+    } else {
+        $res = fuzzyInferenceSugeno($laptop, $budget, $profile);
     }
-
-    // === HARD FILTER: OS (jika dipilih) ===
-    // Normalisasi: petakan value pilihan user ke kata kunci yang ada di kolom OS dataset
-    if (!empty($osPref)) {
-        $osRaw = strtolower(trim($laptop['OS'] ?? ''));
-
-        // Peta normalisasi: value form → keyword yang dicari di kolom OS dataset
-        $osKeywordMap = [
-            'windows 11' => ['windows 11'],
-            'windows 10' => ['windows 10'],
-            'mac'        => ['mac os', 'mac catalina', 'mac high sierra', 'mac 10.', 'macos'],
-            'chrome'     => ['chrome os'],
-            'ubuntu'     => ['ubuntu'],
-            'android'    => ['android'],
-            'dos'        => ['dos'],
-        ];
-
-        $prefKey     = strtolower(trim($osPref));
-        $keywords    = $osKeywordMap[$prefKey] ?? [strtolower($osPref)];
-
-        $matched = false;
-        foreach ($keywords as $kw) {
-            if (str_contains($osRaw, $kw)) {
-                $matched = true;
-                break;
-            }
-        }
-        if (!$matched) continue;
-    }
-
-    // Masukkan pref ke data laptop untuk bonus skor (opsional, sudah ditangani oleh hard filter)
-    $laptop['brand_pref'] = $brandPref;
-    $laptop['os_pref']    = $osPref;
-
-    $res = fuzzyInference($laptop, $budget, $profile);
-
-    if ($res['score'] > 15) {
+    
+    if ($res['score'] > 5) {
         $results[] = [
             'nomor'   => $laptop['nomor']     ?? '0',
-            'name'    => $laptop['name']      ?? 'N/A',
-            'brand'   => $laptop['brand']     ?? 'N/A',
+            'name'    => $laptop['name']       ?? 'N/A',
+            'brand'   => $laptop['brand']      ?? 'N/A',
             'price'   => $laptop['price'],
-            'cpu'     => $laptop['processor'] ?? 'N/A',
-            'gpu'     => $laptop['GPU']       ?? 'N/A',
-            'ram'     => intval($laptop['ram_gb']) . ' GB',
+            'cpu'     => $laptop['processor']  ?? 'N/A',
+            'gpu'     => $laptop['GPU']        ?? 'N/A',
+            'ram'     => intval($laptop['ram_gb'])     . ' GB',
             'storage' => intval($laptop['storage_gb']) . ' GB',
-            'display' => $laptop['display_size'] . '"',
-            'os'      => $laptop['OS']        ?? 'N/A',
+            'display' => ($laptop['display_size'] ?? '?') . '"',
+            'os'      => $laptop['OS']         ?? 'N/A',
             'score'   => $res['score'],
             'reason'  => $res['reason'],
+            'method'  => strtoupper($method)
         ];
     }
 }
 
-// Urutkan: skor tertinggi, jika sama → harga lebih murah tampil dulu
-usort($results, function($a, $b) {
-    if ($b['score'] !== $a['score']) return $b['score'] <=> $a['score'];
-    return $a['price'] <=> $b['price'];
-});
-
-// Top 10
-echo json_encode(array_slice($results, 0, 10));
+usort($results, fn($a, $b) => $b['score'] <=> $a['score']);
+echo json_encode(array_slice($results, 0, 12));

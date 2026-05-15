@@ -15,6 +15,7 @@ const profileSel    = $('profile');
 const displaySel    = $('minDisplay');
 const osSel         = $('osPref');
 const brandSel      = $('brandPref');
+const methodSel     = $('fuzzyMethod');
 const btnCari       = $('btnCari');
 
 const loadingState  = $('loadingState');
@@ -23,6 +24,18 @@ const errorState    = $('errorState');
 const errorMsg      = $('errorMsg');
 const resultsGrid   = $('resultsGrid');
 const resultsBadge  = $('resultsBadge');
+
+const methodInfoText = document.querySelector('.method-info p strong');
+
+if (methodSel && methodInfoText) {
+    methodSel.addEventListener('change', (e) => {
+        if (e.target.value === 'tsukamoto') {
+            methodInfoText.textContent = 'Fuzzy Tsukamoto';
+        } else {
+            methodInfoText.textContent = 'Fuzzy Sugeno';
+        }
+    });
+}
 
 const modal         = $('detailModal');
 const closeModal    = $('closeModal');
@@ -224,6 +237,7 @@ form.addEventListener('submit', async (e) => {
     const minDisplay = parseFloat(displaySel.value) || 0;
     const os         = osSel.value;
     const brand      = brandSel.value;
+    const method     = methodSel ? methodSel.value : 'sugeno';
 
     // UI: Loading
     showState(loadingState);
@@ -235,7 +249,7 @@ form.addEventListener('submit', async (e) => {
         const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ budget, profile, min_display: minDisplay, os, brand })
+            body: JSON.stringify({ budget, profile, min_display: minDisplay, os, brand, method })
         });
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

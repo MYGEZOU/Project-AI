@@ -20,12 +20,10 @@
 
         <!-- ====== HERO HEADER ====== -->
         <header class="hero">
-            <div class="hero-badge"><i class='bx bx-brain'></i> AI-Powered</div>
             <div class="logo">
                 <div class="logo-icon"><i class='bx bx-laptop'></i></div>
                 <div>
                     <h1>Sistem Pakar Laptop</h1>
-                    <span class="logo-subtitle">untuk Mahasiswa</span>
                 </div>
             </div>
             <p class="hero-desc">Temukan laptop ideal untuk kebutuhan akademikmu menggunakan teknologi <strong>Fuzzy Logic</strong> — mesin cerdas yang mempertimbangkan CPU, GPU, RAM, Storage, dan Budget secara holistik.</p>
@@ -39,6 +37,19 @@
                 <h2 class="panel-title"><i class='bx bx-filter-alt'></i> Kriteria Pencarian</h2>
 
                 <form id="filterForm">
+                    <!-- Pilihan Metode Fuzzy -->
+                    <div class="field-group">
+                        <label for="fuzzyMethod">METODE INFERENSI FUZZY</label>
+                        <div class="select-wrap" style="border: 1px solid #3b82f6;">
+                            <i class='bx bx-brain' style="color: #3b82f6;"></i>
+                            <select id="fuzzyMethod">
+                                <option value="sugeno" selected>Fuzzy Sugeno (Orde Nol)</option>
+                                <option value="tsukamoto">Fuzzy Tsukamoto</option>
+                            </select>
+                            <i class='bx bx-chevron-down select-arrow'></i>
+                        </div>
+                    </div>
+
                     <!-- Budget -->
                     <div class="field-group">
                         <label for="budget">Maksimal Budget</label>
@@ -124,6 +135,7 @@
                             <i class='bx bx-chevron-down select-arrow'></i>
                         </div>
                     </div>
+
 
                     <!-- Tombol Submit -->
                     <button type="submit" class="btn-cari" id="btnCari">
